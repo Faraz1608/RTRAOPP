@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Analyzer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Risk Analyzer</h1>
+            <p>Smart Contract & Privacy Scanner</p>
+        </header>
+
+        <div class="main-content">
+            <div id="initial-view">
+                <p class="description">Scan this page to detect hidden risks and privacy violations.</p>
+                <button id="scan-btn" class="glow-on-hover">🔍 SCAN PAGE</button>
+            </div>
+
+            <div id="loading-view" class="hidden">
+                <div class="loader"></div>
+                <p>Analyzing legal text...</p>
+            </div>
+
+            <div id="results-view" class="hidden">
+                <div class="score-card">
+                    <span class="score-label">Risk Level</span>
+                    <h2 id="risk-level">MEDIUM</h2>
+                    <div id="risk-score-bar" class="progress-bar">
+                        <div class="fill" style="width: 50%;"></div>
+                    </div>
+                </div>
+
+                <div class="summary-section">
+                    <h3>🔍 Summary</h3>
+                    <ul id="summary-list">
+                        <!-- Items go here -->
+                    </ul>
+                </div>
+
+                <div class="summary-section">
+                    <h3>📊 Category Breakdown</h3>
+                    <div id="category-list">
+                        <!-- Categories go here -->
+                    </div>
+                </div>
+
+                <div class="clauses-section">
+                    <h3>⚠️ Top Risks</h3>
+                    <div id="clauses-list">
+                        <!-- Clauses go here -->
+                    </div>
+                </div>
+
+                <button id="back-btn" class="secondary-btn">Back</button>
+            </div>
+
+            <div id="error-view" class="hidden">
+                <p class="error-msg">⚠️ Failed to connect to Analysis Server.</p>
+                <p class="small">Ensure the Python backend is running at localhost:8000</p>
+                <button id="retry-btn" class="secondary-btn">Retry</button>
+            </div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
