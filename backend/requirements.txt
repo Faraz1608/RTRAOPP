@@ -7,3 +7,8 @@ numpy
 nltk
 beautifulsoup4
 requests
+textstat
+pdfplumber
+sqlalchemy
+python-multipart
+# python-multipart is needed for Form/File uploads in FastAPI

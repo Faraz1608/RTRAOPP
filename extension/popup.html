@@ -16,11 +16,40 @@
         </header>
 
         <div class="main-content">
-            <div id="initial-view">
-                <p class="description">Scan this page to detect hidden risks and privacy violations.</p>
-                <button id="scan-btn" class="glow-on-hover">🔍 SCAN PAGE</button>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="scan-tab">Page Scan</button>
+                <button class="tab-btn" data-tab="upload-tab">Upload/Paste</button>
+                <button class="tab-btn" data-tab="history-tab">History</button>
             </div>
 
+            <!-- TAB 1: Scan Page -->
+            <div id="scan-tab" class="tab-content active">
+                <div id="initial-view">
+                    <p class="description">Scan this page to detect hidden risks and privacy violations.</p>
+                    <button id="scan-btn" class="glow-on-hover">🔍 SCAN PAGE</button>
+                </div>
+            </div>
+
+            <!-- TAB 2: Upload/Paste -->
+            <div id="upload-tab" class="tab-content hidden">
+                <textarea id="paste-area" placeholder="Paste legal text here..."></textarea>
+                <div class="file-upload">
+                    <label for="pdf-upload" class="upload-label">Or upload PDF</label>
+                    <input type="file" id="pdf-upload" accept=".pdf,.txt" hidden>
+                </div>
+                <button id="manual-scan-btn" class="glow-on-hover" style="margin-top:10px; width:100%">Analyze
+                    Text</button>
+            </div>
+
+            <!-- TAB 3: History -->
+            <div id="history-tab" class="tab-content hidden">
+                <ul id="history-list">
+                    <li>Loading history...</li>
+                </ul>
+            </div>
+
+            <!-- SHARED: Loading & Results -->
             <div id="loading-view" class="hidden">
                 <div class="loader"></div>
                 <p>Analyzing legal text...</p>

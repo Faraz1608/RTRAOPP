@@ -53,6 +53,63 @@ header p {
     display: none !important;
 }
 
+/* Tabs */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #334155;
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    flex: 1;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 10px;
+    border-radius: 0;
+    font-size: 0.8rem;
+}
+
+.tab-btn.active {
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Uploads */
+#paste-area {
+    width: 90%;
+    height: 100px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    display: block;
+    margin: 0 auto 10px auto;
+}
+
+.upload-label {
+    display: block;
+    text-align: center;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 10px;
+    border: 1px dashed #334155;
+    border-radius: 8px;
+}
+
+.upload-label:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
 /* Initial View */
 #initial-view {
     text-align: center;
@@ -106,8 +163,13 @@ button {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Results */
@@ -145,7 +207,8 @@ button {
     transition: width 0.5s ease-out;
 }
 
-.summary-section h3, .clauses-section h3 {
+.summary-section h3,
+.clauses-section h3 {
     font-size: 1rem;
     border-bottom: 1px solid #334155;
     padding-bottom: 5px;

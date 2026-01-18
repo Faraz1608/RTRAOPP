@@ -2,6 +2,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const scanBtn = document.getElementById('scan-btn');
     const backBtn = document.getElementById('back-btn');
     const retryBtn = document.getElementById('retry-btn');
+    const manualScanBtn = document.getElementById('manual-scan-btn');
+    const pdfUpload = document.getElementById('pdf-upload');
+    const historyList = document.getElementById('history-list');
+
+    // Tab Elements
+    const tabs = document.querySelectorAll('.tab-btn');
 
     // Views
     const initialView = document.getElementById('initial-view');
@@ -14,13 +20,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const riskScoreBar = document.querySelector('#risk-score-bar .fill');
     const summaryList = document.getElementById('summary-list');
     const clausesList = document.getElementById('clauses-list');
+    const categoryList = document.getElementById('category-list');
+
+    // --- Tab Switching ---
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active', 'hidden')); // Reset
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+
+            tab.classList.add('active');
+            const contentId = tab.dataset.tab;
+            const content = document.getElementById(contentId);
+            content.style.display = 'block';
+            content.classList.add('active');
+
+            if (contentId === 'history-tab') loadHistory();
+        });
+    });
 
     scanBtn.addEventListener('click', startScan);
-    backBtn.addEventListener('click', showInitial);
+    backBtn.addEventListener('click', () => location.reload());
     retryBtn.addEventListener('click', startScan);
 
+    if (manualScanBtn) {
+        manualScanBtn.addEventListener('click', () => {
+            const text = document.getElementById('paste-area').value;
+            if (text) analyzeText(text);
+        });
+    }
+
+    if (pdfUpload) {
+        pdfUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showView(loadingView);
+            try {
+                const res = await fetch('http://localhost:8000/upload', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error("Upload failed");
+                const data = await res.json();
+                renderResults(data);
+            } catch (err) {
+                console.error(err);
+                showError("PDF Upload failed.");
+            }
+        });
+    }
+
     function showView(view) {
-        [initialView, loadingView, resultsView, errorView].forEach(v => v.classList.add('hidden'));
+        [loadingView, resultsView, errorView].forEach(v => v.classList.add('hidden'));
+        if (view !== initialView) initialView.classList.add('hidden');
         view.classList.remove('hidden');
     }
 
@@ -30,17 +83,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // querying the active tab
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             const activeTab = tabs[0];
+            const url = activeTab.url;
 
             // Send message to content script
             chrome.tabs.sendMessage(activeTab.id, { action: "getText" }, (response) => {
                 if (chrome.runtime.lastError) {
                     console.error(chrome.runtime.lastError);
-                    showError("Could not connect to page. Reload the page and try again.");
+                    showError("Could not connect to page. Reload.");
                     return;
                 }
 
                 if (response && response.text) {
-                    analyzeText(response.text);
+                    analyzeText(response.text, url, activeTab.id);
                 } else {
                     showError("No text found on this page.");
                 }
@@ -48,14 +102,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function analyzeText(text) {
+    async function analyzeText(text, url = null, tabId = null) {
         try {
+            const payload = { text: text };
+            if (url) payload.url = url;
+
             const res = await fetch('http://localhost:8000/analyze', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ text: text })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
             if (!res.ok) throw new Error("Server error");
@@ -63,9 +118,44 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             renderResults(data);
 
+            // Highlight if we have a tabId (only for page scans)
+            if (tabId && data.risky_clauses) {
+                chrome.tabs.sendMessage(tabId, {
+                    action: "highlightRisks",
+                    clauses: data.risky_clauses
+                });
+            }
+
         } catch (err) {
             console.error(err);
             showView(errorView);
+        }
+    }
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('http://localhost:8000/history');
+            const scans = await res.json();
+            if (historyList) {
+                historyList.innerHTML = '';
+                scans.forEach(scan => {
+                    const li = document.createElement('li');
+                    li.style.borderBottom = "1px solid #334155";
+                    li.style.padding = "10px";
+                    li.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; color:white;">
+                            <span>${scan.domain}</span>
+                            <span style="color:${scan.risk_level === 'HIGH' ? '#ef4444' : '#22c55e'}">${scan.risk_level}</span>
+                        </div>
+                        <div style="font-size:0.75rem; color:#94a3b8;">
+                            Score: ${scan.risk_score} • ${new Date(scan.timestamp).toLocaleDateString()}
+                        </div>
+                    `;
+                    historyList.appendChild(li);
+                });
+            }
+        } catch (e) {
+            if (historyList) historyList.innerHTML = '<li>Failed to load history</li>';
         }
     }
 
@@ -74,9 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Risk Level Color
         riskLevelEl.innerText = data.risk_level;
-        let color = '#28a745'; // Green
-        if (data.risk_level === 'MEDIUM') color = '#ffc107'; // Yellow
-        if (data.risk_level === 'HIGH') color = '#dc3545'; // Red
+        let color = '#28a745';
+        if (data.risk_level === 'MEDIUM') color = '#ffc107';
+        if (data.risk_level === 'HIGH') color = '#dc3545';
 
         riskLevelEl.style.color = color;
         riskScoreBar.style.backgroundColor = color;
@@ -91,11 +181,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Category Breakdown
-        const categoryList = document.getElementById('category-list');
         if (categoryList && data.category_details) {
             categoryList.innerHTML = '';
             for (const [cat, score] of Object.entries(data.category_details)) {
-                let catColor = '#22c55e'; // Green
+                let catColor = '#22c55e';
                 if (score > 20) catColor = '#ffc107';
                 if (score > 50) catColor = '#ef4444';
 
@@ -135,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showInitial() {
+        // Reset tabs potentially? Or just go to Scan view
         showView(initialView);
     }
 
