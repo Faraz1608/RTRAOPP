@@ -14,12 +14,28 @@ RISK_KEYWORDS = {
         "exchange.*personal.*data"
     ],
     "User Rights": [
-        "no.*right.*delete", "cannot.*remove.*account", "waive.*class.*action", 
-        "arbitration.*only", "feedback.*property"
+        "no.*right.*delete", "cannot.*remove.*account", "waive", 
+        "feedback.*property", "unable.*to.*opt-out"
     ],
     "Legal & Liability": [
         "indemnify", "hold.*harmless", "no.*warranty", "liability.*limitation",
         "jurisdiction.*courts"
+    ],
+    "Forced Arbitration": [
+        "arbitration", "class.*action.*waiver", "resolve.*disputes.*arbitration",
+        "waive.*right.*trial", "binding.*arbitration"
+    ],
+    "Third-Party Tracking": [
+        "third-party.*cookies", "tracking.*pixels", "web.*beacons",
+        "advertising.*id", "cross-site.*tracking"
+    ],
+    "Biometric Data": [
+        "biometric", "facial.*recognition", "fingerprint", "voice.*print",
+        "dna", "retina.*scan"
+    ],
+    "IP & Location": [
+        "ip.*address", "geolocation", "precise.*location", "gps.*data",
+        "device.*identifier"
     ],
     "Safe": [
         "protect.*privacy", "encrypted", "not.*share.*personal", 
@@ -30,8 +46,9 @@ RISK_KEYWORDS = {
 def split_into_clauses(text):
     """Splits text into sentences/clauses."""
     # Simple split by punctuation
-    clauses = re.split(r'(?<=[.!?])\s+', text)
-    return [c.strip() for c in clauses if len(c) > 20] # Filter very short strings
+    # Improved regex to handle common abbreviations slightly better
+    clauses = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', text)
+    return [c.strip() for c in clauses if len(c.strip()) > 20] # Filter very short strings
 
 def label_clause(clause):
     """Assigns a label based on regex keywords."""
@@ -47,9 +64,19 @@ def build_dataset(data_dir):
     all_clauses = []
     all_labels = []
     
+    if not os.path.exists(data_dir):
+        print(f"Directory {data_dir} does not exist. Creating simple text file for testing.")
+        os.makedirs(data_dir, exist_ok=True)
+        with open(os.path.join(data_dir, "sample.txt"), "w") as f:
+            f.write("We sell your data to third parties. We retain data indefinitely. You cannot sue us, only arbitration.")
+    
     files = [f for f in os.listdir(data_dir) if f.endswith('.txt')]
     print(f"Found {len(files)} files in {data_dir}. Processing...")
     
+    if len(files) == 0:
+        print("No .txt files found to build dataset.")
+        return
+
     for filename in files:
         path = os.path.join(data_dir, filename)
         try:
@@ -80,4 +107,5 @@ def build_dataset(data_dir):
     print(f"Saved to {output_path}")
 
 if __name__ == "__main__":
+    # Updated path to where text files might reside, or keep default
     build_dataset("d:/ML/text")

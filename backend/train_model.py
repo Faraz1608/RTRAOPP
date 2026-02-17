@@ -1,59 +1,111 @@
 import pandas as pd
-import pickle
-import os
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import LinearSVC
-from sklearn.pipeline import Pipeline
+import numpy as np
+import torch
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification, Trainer, TrainingArguments
+from torch.utils.data import Dataset
+import os
+import shutil
 
-# 1. Load Data
+# 1. Configuration
+MODEL_NAME = "distilbert-base-uncased"
 DATA_FILE = "dataset.csv"
+MODEL_DIR = "models/risk_bert"
 
-if not os.path.exists(DATA_FILE):
-    print(f"Error: {DATA_FILE} not found. Run 'python build_dataset.py' first.")
-    exit(1)
+# 2. Prepare Dataset Class
+class RiskDataset(Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
 
-print(f"Loading data from {DATA_FILE}...")
-df = pd.read_csv(DATA_FILE)
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item['labels'] = torch.tensor(self.labels[idx])
+        return item
 
-# Drop NaN values
-df = df.dropna()
+    def __len__(self):
+        return len(self.labels)
 
-print(f"Loaded {len(df)} samples.")
-print("Category distribution:\n", df['category'].value_counts())
+def train():
+    if not os.path.exists(DATA_FILE):
+        print(f"Error: {DATA_FILE} not found. Run 'python build_dataset.py' first.")
+        return
 
-# Ensure we have enough data
-if len(df) < 10:
-    print("Not enough data to train. Please add more rules or files in build_dataset.py")
-    exit(1)
+    print(f"Loading data from {DATA_FILE}...")
+    df = pd.read_csv(DATA_FILE)
+    df = df.dropna()
 
-# 2. Split Data
-X_train, X_test, y_train, y_test = train_test_split(
-    df['text'], df['category'], test_size=0.2, random_state=42, stratify=df['category']
-)
+    # Map categories to IDs
+    labels = df['category'].unique().tolist()
+    label2id = {label: i for i, label in enumerate(labels)}
+    id2label = {i: label for i, label in enumerate(labels)}
+    print(f"Original dataset size: {len(df)}")
+    # Limit to 2000 samples for faster training (CPU)
+    if len(df) > 2000:
+        print("Downsampling to 2000 samples for faster CPU training...")
+        df = df.sample(n=2000, random_state=42)
+    
+    print(f"Training on {len(df)} samples.")
 
-# 3. Create Pipeline
-# TF-IDF -> LinearSVC is fast and effective for short text classification
-pipeline = Pipeline([
-    ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000, ngram_range=(1,2))),
-    ('clf', LinearSVC(class_weight='balanced', random_state=42))
-])
+    # Map categories to IDs
 
-# 4. Train
-print("\nTraining model on real data...")
-pipeline.fit(X_train, y_train)
+    df['label'] = df['category'].map(label2id)
 
-# 5. Evaluate
-print("\nEvaluation:")
-y_pred = pipeline.predict(X_test)
-print(classification_report(y_test, y_pred))
+    # Split Data
+    train_texts, val_texts, train_labels, val_labels = train_test_split(
+        df['text'].tolist(), df['label'].tolist(), test_size=0.2, random_state=42
+    )
 
-# 6. Save Model
-os.makedirs("models", exist_ok=True)
-MODEL_PATH = "models/risk_classifier.pkl"
-with open(MODEL_PATH, "wb") as f:
-    pickle.dump(pipeline, f)
+    # Tokenize
+    print("Tokenizing data...")
+    tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
+    train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
+    val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
 
-print(f"Saving model to {MODEL_PATH}...")
-print("Done! The model is now powered by real-world data.")
+    train_dataset = RiskDataset(train_encodings, train_labels)
+    val_dataset = RiskDataset(val_encodings, val_labels)
+
+    # Model
+    print("Initializing model...")
+    model = DistilBertForSequenceClassification.from_pretrained(
+        MODEL_NAME, num_labels=len(labels), id2label=id2label, label2id=label2id
+    )
+
+    # Training Arguments
+    training_args = TrainingArguments(
+        output_dir='./results',
+        num_train_epochs=3,
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        warmup_steps=100,
+        weight_decay=0.01,
+        logging_dir='./logs',
+        logging_steps=10,
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+    )
+
+    # Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+    )
+
+    # Train
+    print("Starting training...")
+    trainer.train()
+
+    # Save Model
+    print(f"Saving model to {MODEL_DIR}...")
+    if os.path.exists(MODEL_DIR):
+        shutil.rmtree(MODEL_DIR)
+    
+    model.save_pretrained(MODEL_DIR)
+    tokenizer.save_pretrained(MODEL_DIR)
+    print("Training complete and model saved!")
+
+if __name__ == "__main__":
+    train()

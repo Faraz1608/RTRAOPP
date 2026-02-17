@@ -11,4 +11,9 @@ textstat
 pdfplumber
 sqlalchemy
 python-multipart
-# python-multipart is needed for Form/File uploads in FastAPI
+torch
+transformers
+pytesseract
+Pillow
+cachetools
+accelerate

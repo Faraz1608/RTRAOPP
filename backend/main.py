@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker, Session
 import datetime
 import pdfplumber
 import io
+from cachetools import TTLCache 
 
 from risk_engine import RiskEngine
 
@@ -46,29 +47,39 @@ app.add_middleware(
 
 risk_engine = RiskEngine()
 
+# 2. Caching Layer (Max 100 items, TTL 24 hours)
+cache = TTLCache(maxsize=100, ttl=86400)
+
 class AnalyzeRequest(BaseModel):
     text: str
     url: str | None = None
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Risk Analyzer API is running with ML & DB"}
+    return {"status": "online", "message": "Risk Analyzer API is running with DistilBERT & OCR"}
 
 @app.post("/analyze")
 def analyze_policy(request: AnalyzeRequest, db: Session = Depends(get_db)):
     if not request.text:
         raise HTTPException(status_code=400, detail="No text provided")
     
+    # Check Cache
+    if request.url and request.url in cache:
+        print(f"Dataset Cache Hit for {request.url}")
+        return cache[request.url]
+
     # Analyze
-    processed_text = request.text[:100000]
+    # Limit text length to avoid memory explosion (Transformers handle usually 512 tokens, but we use chunks)
+    processed_text = request.text[:100000] 
     results = risk_engine.analyze_text(processed_text)
     
     # Save to History
     domain = "Unknown"
     if request.url:
-        # Simple domain extraction
         try:
              domain = request.url.split("//")[-1].split("/")[0]
+             # Update Cache
+             cache[request.url] = results
         except:
              pass
 
@@ -89,25 +100,8 @@ def get_history(db: Session = Depends(get_db)):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    if file.filename.endswith(".pdf"):
-        # Helper to read PDF
-        try:
-            content = await file.read()
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    text += page.extract_text() or ""
-            
-            if not text.strip():
-                 raise HTTPException(status_code=400, detail="Could not extract text from PDF")
-            
-            return risk_engine.analyze_text(text[:100000])
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"PDF Process Error: {str(e)}")
-    
-    else:
-        # Assume text file
+    try:
         content = await file.read()
-        text = content.decode("utf-8")
-        return risk_engine.analyze_text(text[:100000])
-
+        return risk_engine.analyze_file(content, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File Processing Error: {str(e)}")

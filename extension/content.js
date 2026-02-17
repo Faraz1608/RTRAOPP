@@ -1,67 +1,105 @@
-// 1. Text Extraction
+// 1. Smart Text Extraction
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "getText") {
-        const fullText = document.body.innerText;
-        const cleanText = fullText.replace(/\s+/g, ' ').trim();
-        sendResponse({ text: cleanText });
+        const text = extractMainContent();
+        sendResponse({ text: text });
     }
 
-    // 2. Highlighting Logic
     if (request.action === "highlightRisks") {
-        const clauses = request.clauses; // Array of {text: "...", risk_score: 20}
-
+        const clauses = request.clauses;
         if (!clauses || clauses.length === 0) return;
-
         highlightTextOnPage(clauses);
         sendResponse({ status: "success" });
     }
     return true;
 });
 
+function extractMainContent() {
+    // Clone body to avoid messing up the page during extraction
+    const clone = document.body.cloneNode(true);
+
+    // Remove noise elements
+    const cleanupTags = ['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'NAV', 'FOOTER', 'HEADER', 'ASIDE'];
+    const candidates = clone.querySelectorAll(cleanupTags.join(','));
+    candidates.forEach(el => el.remove());
+
+    // Also remove elements with "hidden" class or style
+    // (This is hard on a clone without computed styles, so we rely on innerText's visibility logic mostly)
+
+    // Get text
+    let text = clone.innerText;
+
+    // Normalize whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    return text;
+}
+
+// 2. Robust Highlighting
 function highlightTextOnPage(clauses) {
-    // Simple traversal to find and highlight text nodes
-    // Note: robust highlighting on complex DOMs is hard. 
-    // This is a simplified "exact match" approach on text nodes.
-
-    function escapeRegExp(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    // Performance optimization: Combine phrases into one regex? 
-    // Or just iterate. Let's iterate for simplicity and control.
-
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
     let node;
     while (node = walker.nextNode()) {
-        textNodes.push(node);
+        if (node.nodeValue.trim().length > 10) { // Ignore tiny nodes
+            textNodes.push(node);
+        }
     }
 
     clauses.forEach(clause => {
-        // We look for a significant substring to match, as extraction might strip some whitespace/chars
-        const searchPhrase = clause.text.substring(0, 50); // Match first 50 chars
-        if (searchPhrase.length < 10) return;
+        const clauseText = clause.text.replace(/\s+/g, ' ').trim();
+        if (clauseText.length < 10) return;
 
-        textNodes.forEach(node => {
-            const nodeText = node.nodeValue;
-            if (nodeText.includes(searchPhrase)) {
-                // Determine highlight color based on score
-                let color = "yellow";
-                if (clause.risk_score > 40) color = "#fae8e8"; // Light red
+        // Strategy: Match the first 50 chars significant enough to be unique
+        const searchChunk = clauseText.substring(0, 60);
 
-                const span = document.createElement('span');
-                span.style.backgroundColor = color;
-                span.style.borderBottom = "2px solid red";
-                span.title = `Risk: ${clause.issues.join(", ")}`;
-                span.innerText = nodeText;
+        for (const node of textNodes) {
+            const nodeText = node.nodeValue.replace(/\s+/g, ' ');
 
-                // Replace text node with span
-                try {
-                    if (node.parentNode) {
-                        node.parentNode.replaceChild(span, node);
-                    }
-                } catch (e) { }
+            // 1. Exact match (normalized)
+            if (nodeText.includes(searchChunk)) {
+                highlightNode(node, searchChunk, clause);
+                return; // Found it
             }
-        });
+
+            // 2. Fuzzy Context Match (First 20 chars + Last 20 chars of chunk)
+            // Useful if there are minor typos or distinct words
+            if (searchChunk.length > 40) {
+                const start = searchChunk.substring(0, 20);
+                const end = searchChunk.substring(searchChunk.length - 20);
+                if (nodeText.includes(start) && nodeText.includes(end)) {
+                    highlightNode(node, start, clause);
+                    return;
+                }
+            }
+        }
     });
+}
+
+function highlightNode(node, matchText, clause) {
+    try {
+        const span = document.createElement('span');
+
+        // Style based on risk score
+        let bgColor = "#fffbeb"; // Warning yellow
+        let borderColor = "#f59e0b";
+
+        if (clause.risk_score > 50) {
+            bgColor = "#fef2f2"; // Danger red
+            borderColor = "#ef4444";
+        }
+
+        span.style.backgroundColor = bgColor;
+        span.style.borderBottom = `2px solid ${borderColor}`;
+        span.style.cursor = "help";
+        span.title = `Risk: ${clause.issues.join(", ")}`;
+
+        // We need to wrap the *entire* node logic properly, but for V1 replacement:
+        span.textContent = node.nodeValue;
+
+        if (node.parentNode) {
+            node.parentNode.replaceChild(span, node);
+        }
+    } catch (e) {
+        console.error("Highlight Error", e);
+    }
 }

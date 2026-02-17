@@ -31,10 +31,27 @@ The backend powers the risk analysis engine.
    pip install -r requirements.txt
    ```
 
-3. Run the server:
+3. Build the dataset and train the NEW Transformer model:
    ```bash
-   uvicorn main:app --reload
+   python build_dataset.py
+   python train_model.py
    ```
+   *Note: Training DistilBERT on CPU may take 10-30 minutes.*
+
+### 4. Update .gitignore
+Ensure the following lines are in your `.gitignore` to avoid committing large model files:
+```
+backend/dataset.csv
+backend/risk_history.db
+backend/models/
+backend/results/
+backend/logs/
+```
+
+### 5. Run the Server
+```bash
+uvicorn main:app --reload
+```
    The API will be available at `http://localhost:8000`.
 
 ### 2. Extension Setup

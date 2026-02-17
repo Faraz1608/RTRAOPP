@@ -18,3 +18,7 @@ print(f"Total Score: {results['total_risk_score']}")
 print("Risky Clauses:")
 for c in results['risky_clauses']:
     print(f"- {c['risk_score']}: {c['text']} -> {c['issues']}")
+
+print("\nAI Summary:")
+for s in results['summary']:
+    print(f"- {s}")

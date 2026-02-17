@@ -11,3 +11,8 @@ env/
 *.log
 # Extension
 extension/node_modules/
+backend/dataset.csv
+backend/risk_history.db
+backend/models/
+backend/results/
+backend/logs/
