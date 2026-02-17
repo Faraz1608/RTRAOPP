@@ -6,23 +6,23 @@ import textstat
 import pdfplumber
 import pytesseract
 from PIL import Image
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
 
 class RiskEngine:
-    def __init__(self):
+    def __init__(self, model_path="models/risk_bert"):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"RiskEngine running on: {self.device}")
 
-        # 1. Load Classifier (DistilBERT)
-        self.model_path = "models/risk_bert"
+        # 1. Load Classifier (Legal-BERT)
+        self.model_path = model_path
         self.tokenizer = None
         self.model = None
         
         if os.path.exists(self.model_path):
             try:
-                print("Loading fine-tuned DistilBERT model...")
-                self.tokenizer = DistilBertTokenizerFast.from_pretrained(self.model_path)
-                self.model = DistilBertForSequenceClassification.from_pretrained(self.model_path).to(self.device)
+                print(f"Loading model from {self.model_path}...")
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path).to(self.device)
                 self.model.eval()
                 print("✅ Risk Classifier Loaded.")
             except Exception as e:
@@ -61,36 +61,80 @@ class RiskEngine:
         risky_text_blob = "" 
 
         # 3. Inference
+        # 3. Inference
         if self.model and self.tokenizer:
-            # Batch prediction could be faster, but let's do simple loop for now or small batches
-            inputs = self.tokenizer(clauses, padding=True, truncation=True, max_length=128, return_tensors="pt").to(self.device)
-            
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
-                predictions = torch.argmax(probabilities, dim=-1)
-
-            # Map IDs to labels (Need to fetch label map from model config)
-            id2label = self.model.config.id2label
-
             for i, clause in enumerate(clauses):
-                pred_id = predictions[i].item()
-                label = id2label[pred_id]
-                score = probabilities[i][pred_id].item()
-
-                if label != "Safe": # Assuming 'Safe' is a label
-                    # Heuristic: Only flag if confidence > 0.6 to reduce false positives
-                    if score > 0.6: 
-                        risk_pts = 20
-                        total_score += risk_pts
-                        analysis_results["category_details"][label] = analysis_results["category_details"].get(label, 0) + risk_pts
+                # Sliding Window for Long Clauses
+                # If clause is long, split into chunks of 512 tokens with overlap
+                # But simple approach: just truncate to 512 (Legal-BERT limit) is usually enough for a single "clause".
+                # A "clause" > 512 tokens (approx 300-400 words) is rare unless split logic failed.
+                # Let's implement robust chunking for safety.
+                
+                inputs = self.tokenizer(clause, return_tensors="pt", truncation=False, verbose=False)
+                input_ids = inputs['input_ids'][0]
+                
+                # If short enough, run once
+                if len(input_ids) <= 512:
+                    chunk_input_ids = input_ids.unsqueeze(0).to(self.device)
+                    attention_mask = inputs['attention_mask'].to(self.device)
+                    
+                    with torch.no_grad():
+                        output = self.model(chunk_input_ids, attention_mask=attention_mask)
+                        probs = torch.nn.functional.softmax(output.logits, dim=-1)
+                        top_score, top_label_id = torch.max(probs, dim=-1)
                         
-                        analysis_results["risky_clauses"].append({
-                            "text": clause,
-                            "risk_score": int(score * 100),
-                            "issues": [f"{label} ({int(score*100)}%)"]
-                        })
-                        risky_text_blob += clause + " "
+                    final_score = top_score.item()
+                    final_label_id = top_label_id.item()
+                else:
+                    # Sliding Window Logic
+                    stride = 256
+                    window_size = 510 # Leave room for [CLS] [SEP]
+                    chunks = []
+                    
+                    for k in range(0, len(input_ids), stride):
+                        chunk = input_ids[k:k+window_size]
+                        if len(chunk) < 10: break # Skip tiny residues
+                        # Pad or handle? Auto-handling via tokenizer batching is easier but here we have IDs.
+                        # Actually, let's just re-tokenize chunks to be safe with special tokens.
+                        chunks.append(self.tokenizer.decode(chunk, skip_special_tokens=True))
+                        
+                    # Predict on chunks and take MAX risk
+                    max_risk_score = -1
+                    best_label_id = 0 # Default/Safe
+                    
+                    for chunk_text in chunks:
+                         chunk_inputs = self.tokenizer(chunk_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(self.device)
+                         with torch.no_grad():
+                             out = self.model(**chunk_inputs)
+                             p = torch.nn.functional.softmax(out.logits, dim=-1)
+                             s, l = torch.max(p, dim=-1)
+                             
+                             # Prioritize Risk Labels (assuming Safe is ID with lowest priority or just check score)
+                             # We need the ID map to know which is "Safe". Usually we want the *highest probability of a non-safe class*.
+                             # But here we just take max probability.
+                             if s.item() > max_risk_score:
+                                 max_risk_score = s.item()
+                                 best_label_id = l.item()
+                                 
+                    final_score = max_risk_score
+                    final_label_id = best_label_id
+
+                # Common Logic
+                id2label = self.model.config.id2label
+                label = id2label[final_label_id]
+                
+                if label != "Safe":
+                    if final_score > 0.6:
+                         risk_pts = 20
+                         total_score += risk_pts
+                         analysis_results["category_details"][label] = analysis_results["category_details"].get(label, 0) + risk_pts
+                         
+                         analysis_results["risky_clauses"].append({
+                             "text": clause,
+                             "risk_score": int(final_score * 100),
+                             "issues": [f"{label} ({int(final_score*100)}%)"]
+                         })
+                         risky_text_blob += clause + " "
 
         # 4. Generative Summary
         if self.sum_model and risky_text_blob:

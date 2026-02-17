@@ -2,13 +2,13 @@ import pandas as pd
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification, Trainer, TrainingArguments
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
 from torch.utils.data import Dataset
 import os
 import shutil
 
 # 1. Configuration
-MODEL_NAME = "distilbert-base-uncased"
+MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
 DATA_FILE = "dataset.csv"
 MODEL_DIR = "models/risk_bert"
 
@@ -57,8 +57,9 @@ def train():
     )
 
     # Tokenize
+    # Tokenize
     print("Tokenizing data...")
-    tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
     val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
 
@@ -67,7 +68,7 @@ def train():
 
     # Model
     print("Initializing model...")
-    model = DistilBertForSequenceClassification.from_pretrained(
+    model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME, num_labels=len(labels), id2label=id2label, label2id=label2id
     )
 

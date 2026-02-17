@@ -17,3 +17,4 @@ pytesseract
 Pillow
 cachetools
 accelerate
+datasets
