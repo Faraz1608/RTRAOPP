@@ -24,20 +24,20 @@ class RiskEngine:
                 self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
                 self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path).to(self.device)
                 self.model.eval()
-                print("✅ Risk Classifier Loaded.")
+                print("[SUCCESS] Risk Classifier Loaded.")
             except Exception as e:
-                print(f"⚠️ Failed to load Risk Model: {e}")
+                print(f"[ERROR] Failed to load Risk Model: {e}")
         else:
-            print(f"⚠️ Model not found at {self.model_path}. Run train_model.py first.")
+            print(f"[ERROR] Model not found at {self.model_path}. Run train_model.py first.")
 
         # 2. Load Summarizer (Flan-T5)
         print("Loading Summarizer (Flan-T5)...")
         try:
             self.sum_tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
             self.sum_model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small").to(self.device)
-            print("✅ Summarizer Loaded.")
+            print("[SUCCESS] Summarizer Loaded.")
         except Exception as e:
-            print(f"⚠️ Failed to load Summarizer: {e}")
+            print(f"[ERROR] Failed to load Summarizer: {e}")
             self.sum_model = None
 
     def analyze_text(self, text: str):

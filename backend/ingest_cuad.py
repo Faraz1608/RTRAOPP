@@ -34,8 +34,9 @@ def clean_text(text):
 
 def ingest_cuad():
     print("Downloading CUAD dataset from Hugging Face...")
-    # CUAD on HF is 'cuad'
-    dataset = load_dataset("cuad", split="train") 
+    # CUAD on HF is under the Atticus Project organization
+    # trust_remote_code=True is required for datasets with custom loading scripts
+    dataset = load_dataset("theatticusproject/cuad-qa", split="train", trust_remote_code=True) 
     
     print(f"Loaded {len(dataset)} contracts. Extracting clauses...")
     
