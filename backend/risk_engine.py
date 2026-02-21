@@ -124,7 +124,7 @@ class RiskEngine:
                 label = id2label[final_label_id]
                 
                 if label != "Safe":
-                    if final_score > 0.6:
+                    if final_score > 0.4:
                          risk_pts = 20
                          total_score += risk_pts
                          analysis_results["category_details"][label] = analysis_results["category_details"].get(label, 0) + risk_pts
@@ -157,7 +157,7 @@ class RiskEngine:
             analysis_results["risk_level"] = "LOW"
             
         analysis_results["total_risk_score"] = normalized_score
-        analysis_results["risky_clauses"] = sorted(analysis_results["risky_clauses"], key=lambda x: x["risk_score"], reverse=True)[:5]
+        analysis_results["risky_clauses"] = sorted(analysis_results["risky_clauses"], key=lambda x: x["risk_score"], reverse=True)
 
         return analysis_results
 
