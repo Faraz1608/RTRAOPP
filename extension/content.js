@@ -77,28 +77,38 @@ function highlightTextOnPage(clauses) {
 
 function highlightNode(node, matchText, clause) {
     try {
-        const span = document.createElement('span');
-
         // Style based on risk score
         let bgColor = "#fffbeb"; // Warning yellow
         let borderColor = "#f59e0b";
 
-        if (clause.risk_score > 50) {
+        if (clause.risk_score > 75) {
             bgColor = "#fef2f2"; // Danger red
             borderColor = "#ef4444";
         }
 
+        const nodeText = node.nodeValue;
+        const matchIndex = nodeText.indexOf(matchText);
+
+        if (matchIndex === -1 || !node.parentNode) return;
+
+        // Split: [before][matched highlight][after]
+        const before = nodeText.substring(0, matchIndex);
+        const matched = nodeText.substring(matchIndex, matchIndex + matchText.length);
+        const after = nodeText.substring(matchIndex + matchText.length);
+
+        const span = document.createElement('span');
         span.style.backgroundColor = bgColor;
         span.style.borderBottom = `2px solid ${borderColor}`;
         span.style.cursor = "help";
         span.title = `Risk: ${clause.issues.join(", ")}`;
+        span.textContent = matched;
 
-        // We need to wrap the *entire* node logic properly, but for V1 replacement:
-        span.textContent = node.nodeValue;
-
-        if (node.parentNode) {
-            node.parentNode.replaceChild(span, node);
-        }
+        const parent = node.parentNode;
+        const afterNode = document.createTextNode(after);
+        parent.insertBefore(document.createTextNode(before), node);
+        parent.insertBefore(span, node);
+        parent.insertBefore(afterNode, node);
+        parent.removeChild(node);
     } catch (e) {
         console.error("Highlight Error", e);
     }

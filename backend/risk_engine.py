@@ -57,7 +57,6 @@ class RiskEngine:
             "category_details": {}
         }
 
-        total_score = 0
         risky_text_blob = "" 
 
         # 3. Inference
@@ -124,10 +123,8 @@ class RiskEngine:
                 label = id2label[final_label_id]
                 
                 if label != "Safe":
-                    if final_score > 0.4:
-                         risk_pts = 20
-                         total_score += risk_pts
-                         analysis_results["category_details"][label] = analysis_results["category_details"].get(label, 0) + risk_pts
+                    if final_score > 0.55:
+                         analysis_results["category_details"][label] = analysis_results["category_details"].get(label, 0) + 1
                          
                          analysis_results["risky_clauses"].append({
                              "text": clause,
@@ -147,11 +144,20 @@ class RiskEngine:
             
             analysis_results["summary"].append(f"AI Summary: {gen_summary}")
 
-        # Post-process scores
-        normalized_score = min(100, total_score)
-        if normalized_score >= 70:
+        # Post-process scores using ratio-based scoring
+        risky_count = len(analysis_results["risky_clauses"])
+        total_clauses = max(len(clauses), 1)  # avoid division by zero
+        
+        if risky_count > 0:
+            avg_confidence = sum(c["risk_score"] for c in analysis_results["risky_clauses"]) / risky_count / 100.0
+            risky_ratio = risky_count / total_clauses
+            normalized_score = min(100, int(risky_ratio * avg_confidence * 100))
+        else:
+            normalized_score = 0
+
+        if normalized_score >= 60:
             analysis_results["risk_level"] = "HIGH"
-        elif normalized_score >= 30:
+        elif normalized_score >= 25:
             analysis_results["risk_level"] = "MEDIUM"
         else:
             analysis_results["risk_level"] = "LOW"
